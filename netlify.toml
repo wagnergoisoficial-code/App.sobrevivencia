@@ -6,6 +6,18 @@
   # The directory that contains the compiled output files
   publish = "dist"
 
+# Serverless functions (the Kiwify webhook). Runs only when called; free tier.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Clean URL for the webhook. Must come BEFORE the SPA catch-all below so it is
+# not swallowed by the /* rewrite.
+[[redirects]]
+  from = "/api/kiwify-webhook"
+  to = "/.netlify/functions/kiwify-webhook"
+  status = 200
+
 # Setup redirect rules for Single Page Applications (SPA)
 # This ensures that deep links work properly if routes are implemented
 [[redirects]]
