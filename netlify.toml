@@ -1,0 +1,14 @@
+[build]
+  # The directory where dependencies and package.json are located
+  base = ""
+  # The command to install and build the static assets
+  command = "npm run build"
+  # The directory that contains the compiled output files
+  publish = "dist"
+
+# Setup redirect rules for Single Page Applications (SPA)
+# This ensures that deep links work properly if routes are implemented
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

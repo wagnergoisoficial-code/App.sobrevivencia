@@ -1,0 +1,18 @@
+{
+  "name": "Manual de Sobrevivência: Método 5P",
+  "short_name": "Bunker 5P",
+  "description": "Seu bunker digital para cenários de colapso urbano. Checklists, calculadoras de ração/água e mapas de risco offline.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#f59e0b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/cover_image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Manual de Sobrevivência Apocalíptica",
+  "description": "Manual Completo de Sobrevivência Apocalíptica - Edição 3.0 Premium (Método 5P). Estratégias reais e workbook interativo para proteger sua família quando tudo falhar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
