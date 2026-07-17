@@ -13,13 +13,14 @@ import {
   HeartPulse,
   Users,
   AlertTriangle,
-  ClipboardList
+  ClipboardList,
+  BookOpen
 } from "lucide-react";
 
 interface SidebarProps {
   selectedItemId: string;
-  selectedItemType: "workbook" | "author";
-  onSelectItem: (id: string, type: "workbook" | "author") => void;
+  selectedItemType: "workbook" | "author" | "ebook";
+  onSelectItem: (id: string, type: "workbook" | "author" | "ebook") => void;
   onBackToCover: () => void;
   userEmail: string | null;
   onLogout: () => void;
@@ -172,6 +173,21 @@ export default function Sidebar({
             >
               <User className={`h-4 w-4 ${selectedItemType === "author" ? "text-amber-400" : "text-slate-500"}`} />
               <span>Sobre o Autor</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onSelectItem("ebook", "ebook");
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2.5 rounded flex items-center space-x-2.5 text-xs font-medium cursor-pointer transition-all border ${
+                selectedItemType === "ebook"
+                  ? "bg-amber-500/10 border-amber-500/20 text-amber-400 font-semibold shadow-sm"
+                  : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+              }`}
+            >
+              <BookOpen className={`h-4 w-4 ${selectedItemType === "ebook" ? "text-amber-400" : "text-slate-500"}`} />
+              <span>Manual</span>
             </button>
           </div>
 

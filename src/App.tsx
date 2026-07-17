@@ -9,6 +9,7 @@ import Sidebar from "./components/Sidebar";
 import Workbook from "./components/Workbook";
 import AuthModal from "./components/AuthModal";
 import Author from "./components/Author";
+import EbookReader from "./components/EbookReader";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -127,11 +128,29 @@ const INITIAL_PROGRESS: UserProgress = {
 type ActiveTabType = "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios";
 
 export default function App() {
-  const [view, setView] = useState<"cover" | "workbook" | "author">("cover");
+  const [view, setView] = useState<"cover" | "workbook" | "author" | "ebook">(() => {
+    if (window.location.pathname === "/ebook") {
+      return "ebook";
+    }
+    if (window.location.pathname === "/workbook") {
+      return "workbook";
+    }
+    return "cover";
+  });
   
   // Selection states
-  const [selectedItemId, setSelectedItemId] = useState<string>("workbook");
-  const [selectedItemType, setSelectedItemType] = useState<"workbook" | "author">("workbook");
+  const [selectedItemId, setSelectedItemId] = useState<string>(() => {
+    if (window.location.pathname === "/ebook") {
+      return "ebook";
+    }
+    return "workbook";
+  });
+  const [selectedItemType, setSelectedItemType] = useState<"workbook" | "author" | "ebook">(() => {
+    if (window.location.pathname === "/ebook") {
+      return "ebook";
+    }
+    return "workbook";
+  });
 
   // Active Workbook Tab state
   const [activeTab, setActiveTab] = useState<ActiveTabType>("diagnostic");
@@ -143,6 +162,8 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
+  const [pendingView, setPendingView] = useState<"workbook" | "ebook" | null>(null);
 
   // Load progress from Firestore on Login or localStorage on mount
   useEffect(() => {
@@ -156,6 +177,7 @@ export default function App() {
           console.error("Erro ao carregar progresso salvo:", e);
         }
       }
+      setAuthChecked(true);
       return;
     }
 
@@ -199,9 +221,41 @@ export default function App() {
           setProgress(INITIAL_PROGRESS);
         }
       }
+      setAuthChecked(true);
     });
     return () => unsubscribe();
   }, []);
+
+  // Synchronize path and protect /ebook and /workbook routes
+  useEffect(() => {
+    if (view === "ebook") {
+      if (window.location.pathname !== "/ebook") {
+        window.history.pushState({}, "", "/ebook");
+      }
+      if (authChecked && !userId) {
+        // Redirect to cover/home if not authenticated
+        setView("cover");
+        setAuthModalOpen(true);
+      }
+    } else if (view === "workbook") {
+      if (window.location.pathname !== "/workbook") {
+        window.history.pushState({}, "", "/workbook");
+      }
+      if (authChecked && !userId) {
+        // Redirect to cover/home if not authenticated
+        setView("cover");
+        setAuthModalOpen(true);
+      }
+    } else if (view === "cover") {
+      if (window.location.pathname !== "/") {
+        window.history.pushState({}, "", "/");
+      }
+    } else {
+      if (window.location.pathname !== "/workbook") {
+        window.history.pushState({}, "", "/workbook");
+      }
+    }
+  }, [view, userId, authChecked]);
 
   // Save progress changes
   const updateProgress = (updater: (prev: UserProgress) => UserProgress) => {
@@ -230,13 +284,15 @@ export default function App() {
   };
 
   // Selection Callback
-  const handleSelectItem = (id: string, type: "workbook" | "author") => {
+  const handleSelectItem = (id: string, type: "workbook" | "author" | "ebook") => {
     setSelectedItemId(id);
     setSelectedItemType(type);
     if (type === "workbook") {
       setView("workbook");
     } else if (type === "author") {
       setView("author");
+    } else if (type === "ebook") {
+      setView("ebook");
     }
   };
 
@@ -252,21 +308,44 @@ export default function App() {
       {view === "cover" && (
         <Cover
           onStartReading={() => {
-            // Unused but kept for Cover component compatibility
-            setSelectedItemId("workbook");
-            setSelectedItemType("workbook");
-            setView("workbook");
+            if (userId) {
+              setSelectedItemId("workbook");
+              setSelectedItemType("workbook");
+              setView("workbook");
+            } else {
+              setPendingView("workbook");
+              setAuthModalOpen(true);
+            }
           }}
           onGoToWorkbook={() => {
-            setSelectedItemId("workbook");
-            setSelectedItemType("workbook");
-            setView("workbook");
+            if (userId) {
+              setSelectedItemId("workbook");
+              setSelectedItemType("workbook");
+              setView("workbook");
+            } else {
+              setPendingView("workbook");
+              setAuthModalOpen(true);
+            }
           }}
           onGoToPrintable={() => {
-            // Unused but kept for Cover component compatibility
-            setSelectedItemId("workbook");
-            setSelectedItemType("workbook");
-            setView("workbook");
+            if (userId) {
+              setSelectedItemId("workbook");
+              setSelectedItemType("workbook");
+              setView("workbook");
+            } else {
+              setPendingView("workbook");
+              setAuthModalOpen(true);
+            }
+          }}
+          onGoToEbook={() => {
+            if (userId) {
+              setSelectedItemId("ebook");
+              setSelectedItemType("ebook");
+              setView("ebook");
+            } else {
+              setPendingView("ebook");
+              setAuthModalOpen(true);
+            }
           }}
           userEmail={userEmail}
           onOpenLogin={() => setAuthModalOpen(true)}
@@ -292,15 +371,17 @@ export default function App() {
           />
 
           {/* Panel Loader */}
-          {view === "workbook" ? (
+          {view === "workbook" && (
             <Workbook
               progress={progress}
               onUpdateProgress={updateProgress}
               activeTab={activeTab}
               setActiveTab={setActiveTab}
             />
-          ) : (
-            <Author />
+          )}
+          {view === "author" && <Author />}
+          {view === "ebook" && (
+            <EbookReader onBackToCover={() => setView("cover")} />
           )}
 
         </div>
@@ -309,9 +390,18 @@ export default function App() {
       {/* Auth Modal Overlay */}
       <AuthModal
         isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
+        onClose={() => {
+          setAuthModalOpen(false);
+          setPendingView(null);
+        }}
         onAuthSuccess={(email) => {
           setUserEmail(email);
+          if (pendingView) {
+            setView(pendingView);
+            setSelectedItemId(pendingView);
+            setSelectedItemType(pendingView);
+            setPendingView(null);
+          }
         }}
       />
     </div>

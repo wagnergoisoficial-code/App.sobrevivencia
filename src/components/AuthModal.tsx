@@ -20,10 +20,10 @@ import {
 } from "lucide-react";
 import { 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
   sendPasswordResetEmail 
 } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "../lib/firebase";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -32,10 +32,9 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   
   // Status states
@@ -66,32 +65,27 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
       return;
     }
 
-    if (mode === "register") {
-      if (password.length < 6) {
-        setError("A senha deve ter pelo menos 6 caracteres.");
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError("As senhas informadas não coincidem.");
-        return;
-      }
-    }
-
     setLoading(true);
 
     try {
       if (mode === "login") {
         // Sign In
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        
+        // Update user record in users Firestore collection
+        if (db) {
+          try {
+            await setDoc(doc(db, "users", userCredential.user.uid), {
+              uid: userCredential.user.uid,
+              email: userCredential.user.email || email,
+              lastLogin: new Date().toISOString()
+            }, { merge: true });
+          } catch (firestoreErr) {
+            console.error("Erro ao atualizar login do usuário no Firestore:", firestoreErr);
+          }
+        }
+
         setSuccessMsg("Acesso autorizado! Carregando seu bunker digital...");
-        setTimeout(() => {
-          onAuthSuccess(userCredential.user.email || email);
-          onClose();
-        }, 1200);
-      } else if (mode === "register") {
-        // Sign Up
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        setSuccessMsg("Conta de sobrevivente criada com sucesso! Sincronizando dados...");
         setTimeout(() => {
           onAuthSuccess(userCredential.user.email || email);
           onClose();
@@ -105,15 +99,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
     } catch (err: any) {
       console.error("Erro na autenticação:", err);
       // Translate common Firebase errors
-      let msg = "Ocorreu um erro ao processar sua solicitação.";
-      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
-        msg = "E-mail ou senha incorretos. Verifique suas credenciais.";
-      } else if (err.code === "auth/email-already-in-use") {
-        msg = "Este endereço de e-mail já está cadastrado.";
-      } else if (err.code === "auth/invalid-email") {
+      let msg = "Acesso liberado apenas para quem adquiriu o produto. Verifique o e-mail usado na compra.";
+      if (err.code === "auth/invalid-email") {
         msg = "Formato de e-mail inválido.";
-      } else if (err.code === "auth/weak-password") {
-        msg = "A senha é muito fraca. Escolha uma senha mais forte (mínimo 6 caracteres).";
       } else if (err.code === "auth/network-request-failed") {
         msg = "Erro de conexão. Verifique sua internet.";
       }
@@ -155,20 +143,16 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
               <div className="inline-flex items-center justify-center p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20 mb-1">
                 {mode === "login" ? (
                   <LockKeyhole className="h-6 w-6 text-amber-500" />
-                ) : mode === "register" ? (
-                  <UserPlus className="h-6 w-6 text-amber-500" />
                 ) : (
                   <ShieldAlert className="h-6 w-6 text-amber-500" />
                 )}
               </div>
               <h2 className="text-xl md:text-2xl font-serif font-bold text-slate-100">
                 {mode === "login" && "Acesso ao Bunker Digital"}
-                {mode === "register" && "Criar Ficha de Sobrevivente"}
                 {mode === "forgot" && "Recuperar Credenciais"}
               </h2>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
                 {mode === "login" && "Entre para salvar seu progresso tático, checklists e inventários em tempo real."}
-                {mode === "register" && "Cadastre-se para sincronizar seus dados do Workbook entre múltiplos dispositivos."}
                 {mode === "forgot" && "Informe seu e-mail cadastrado para enviarmos instruções de recuperação."}
               </p>
             </div>
@@ -245,26 +229,6 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
                 </div>
               )}
 
-              {/* Confirm Password - Only in "register" mode */}
-              {mode === "register" && (
-                <div className="space-y-1.5 animate-fadeIn">
-                  <label className="block text-[10px] font-mono uppercase text-slate-400 tracking-wider font-bold">
-                    Confirmar Senha
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2.5 pl-10 pr-10 text-slate-100 text-sm placeholder-slate-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all font-sans"
-                    />
-                  </div>
-                </div>
-              )}
-
               {/* Submit Button */}
               <button
                 type="submit"
@@ -280,7 +244,6 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
                   <>
                     <span>
                       {mode === "login" && "Autenticar Entrada"}
-                      {mode === "register" && "Registrar no Sistema"}
                       {mode === "forgot" && "Enviar Recuperação"}
                     </span>
                   </>
@@ -290,25 +253,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
 
             {/* Mode Switcher Footer */}
             <div className="pt-4 border-t border-slate-800/50 text-center">
-              {mode === "login" && (
+              {mode === "forgot" && (
                 <p className="text-xs text-slate-400">
-                  Ainda não tem cadastro?{" "}
-                  <button
-                    onClick={() => {
-                      setMode("register");
-                      setError(null);
-                      setSuccessMsg(null);
-                    }}
-                    className="text-amber-500 hover:text-amber-400 font-bold transition-colors cursor-pointer"
-                  >
-                    Registrar-se grátis
-                  </button>
-                </p>
-              )}
-
-              {(mode === "register" || mode === "forgot") && (
-                <p className="text-xs text-slate-400">
-                  Já possui uma ficha?{" "}
+                  Lembrou suas credenciais?{" "}
                   <button
                     onClick={() => {
                       setMode("login");

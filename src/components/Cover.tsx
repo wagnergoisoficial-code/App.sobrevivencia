@@ -6,11 +6,12 @@ interface CoverProps {
   onStartReading: () => void;
   onGoToWorkbook: () => void;
   onGoToPrintable: () => void;
+  onGoToEbook: () => void;
   userEmail: string | null;
   onOpenLogin: () => void;
 }
 
-export default function Cover({ onStartReading, onGoToWorkbook, onGoToPrintable, userEmail, onOpenLogin }: CoverProps) {
+export default function Cover({ onStartReading, onGoToWorkbook, onGoToPrintable, onGoToEbook, userEmail, onOpenLogin }: CoverProps) {
   // Use the imported image which Vite automatically hashes and cache-busts on build
    const coverImgSrc = coverImg;
 
@@ -134,7 +135,7 @@ export default function Cover({ onStartReading, onGoToWorkbook, onGoToPrintable,
             </div>
 
             {/* Actions Block - very direct, compact, high-contrast and zero-scroll */}
-            <div className="w-full max-w-xs sm:max-w-sm space-y-2 px-2 sm:px-0">
+            <div className="w-full max-w-xs sm:max-w-sm space-y-3 px-2 sm:px-0">
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -144,6 +145,17 @@ export default function Cover({ onStartReading, onGoToWorkbook, onGoToPrintable,
               >
                 <ClipboardCheck className="h-4 w-4 sm:h-5 sm:w-5 text-slate-950 animate-pulse" />
                 <span>Entrar no Painel e Simuladores</span>
+              </motion.button>
+
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                onClick={onGoToEbook}
+                className="w-full flex items-center justify-center space-x-2 bg-slate-900 hover:bg-slate-800 active:bg-slate-700 text-amber-500 border border-amber-500/20 font-sans font-bold px-5 py-3 sm:py-3.5 rounded-xl transition-all cursor-pointer text-xs sm:text-sm uppercase tracking-wider"
+              >
+                <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
+                <span>Ler Manual Completo (Ebook)</span>
               </motion.button>
             </div>
           </div>
