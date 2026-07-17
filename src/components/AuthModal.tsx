@@ -72,17 +72,17 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         // Sign In
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         
-        // Update user record in users Firestore collection
+        // Not awaited: Firestore only settles a write once the server acks it, so
+        // an unreachable backend would leave the button spinning forever. Recording
+        // lastLogin is not worth blocking the login on.
         if (db) {
-          try {
-            await setDoc(doc(db, "users", userCredential.user.uid), {
-              uid: userCredential.user.uid,
-              email: userCredential.user.email || email,
-              lastLogin: new Date().toISOString()
-            }, { merge: true });
-          } catch (firestoreErr) {
+          setDoc(doc(db, "users", userCredential.user.uid), {
+            uid: userCredential.user.uid,
+            email: userCredential.user.email || email,
+            lastLogin: new Date().toISOString()
+          }, { merge: true }).catch((firestoreErr) => {
             console.error("Erro ao atualizar login do usuário no Firestore:", firestoreErr);
-          }
+          });
         }
 
         setSuccessMsg("Acesso autorizado! Carregando seu bunker digital...");

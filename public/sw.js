@@ -1,4 +1,4 @@
-const CACHE_NAME = 'manual-sobrevivencia-pwa-v5';
+const CACHE_NAME = 'manual-sobrevivencia-pwa-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -49,6 +49,12 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('identitytoolkit') ||
     !event.request.url.startsWith(self.location.origin)
   ) {
+    return;
+  }
+
+  // The PDF viewer loads the file with Range requests, which the cache can only
+  // answer with a full 200 instead of the expected 206. Let them hit the network.
+  if (url.pathname.endsWith('.pdf') || event.request.headers.has('range')) {
     return;
   }
 

@@ -1,15 +1,20 @@
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
-import firebaseConfigJson from "../../firebase-applet-config.json";
+// firebase-applet-config.json is gitignored, so it is absent on CI and in fresh
+// clones. Resolving it eagerly fails the build there, hence the lazy lookup.
+const appletConfig: Record<string, string> =
+  (import.meta.glob("../../firebase-applet-config.json", { eager: true, import: "default" })[
+    "../../firebase-applet-config.json"
+  ] as Record<string, string>) || {};
 
-const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey;
-const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain;
-const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId;
-const storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket;
-const messagingSenderId = import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId;
-const appId = import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId;
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId;
+const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || appletConfig.apiKey;
+const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain;
+const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId;
+const storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket;
+const messagingSenderId = import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId;
+const appId = import.meta.env.VITE_FIREBASE_APP_ID || appletConfig.appId;
+const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || appletConfig.firestoreDatabaseId;
 
 // Validate that variables are fully configured and are not placeholders
 const isConfigured = 

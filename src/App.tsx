@@ -200,7 +200,11 @@ export default function App() {
                 progressToUpload = JSON.parse(localSaved);
               } catch (e) {}
             }
-            await setDoc(docRef, progressToUpload);
+            // Not awaited: an unreachable Firestore never settles a write, which
+            // would leave authChecked false and the whole app waiting on it.
+            setDoc(docRef, progressToUpload).catch((err) => {
+              console.error("Erro ao enviar progresso inicial:", err);
+            });
             setProgress(progressToUpload);
           }
         } catch (e) {

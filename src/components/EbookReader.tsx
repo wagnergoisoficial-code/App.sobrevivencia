@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowLeft, BookOpen, ExternalLink, Shield } from "lucide-react";
+import { ArrowLeft, BookOpen, Download, ExternalLink, Shield } from "lucide-react";
 
 interface EbookReaderProps {
   onBackToCover: () => void;
@@ -38,6 +38,15 @@ export default function EbookReader({ onBackToCover }: EbookReaderProps) {
             <Shield className="h-3 w-3 animate-pulse" />
             <span>Acesso Autorizado</span>
           </div>
+          <a
+            href="/ebook/manual-sobrevivencia.pdf"
+            download="Manual Completo de Sobrevivencia Apocaliptica - Edicao 3.0 Premium.pdf"
+            className="flex items-center space-x-1 text-[10px] text-amber-500 hover:text-amber-400 hover:underline font-bold uppercase tracking-wider cursor-pointer"
+            id="link-ebook-download"
+          >
+            <span>Baixar</span>
+            <Download className="h-3 w-3" />
+          </a>
           <a
             href="/ebook/manual-sobrevivencia.pdf"
             target="_blank"
