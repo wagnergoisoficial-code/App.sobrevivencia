@@ -1,8 +1,8 @@
-const CACHE_NAME = 'manual-sobrevivencia-pwa-v6';
+const CACHE_NAME = 'manual-sobrevivencia-pwa-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/cover_image.png'
+  '/cover_image.jpeg'
 ];
 
 // Install Event - Pre-cache the shell of the app
@@ -58,9 +58,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-First for HTML documents and cover_image.png so updates publish immediately while online
+  // Network-First for HTML documents and the cover image so updates publish immediately while online
   const isHtmlRequest = event.request.headers.get('accept')?.includes('text/html') || url.pathname === '/' || url.pathname.endsWith('/index.html');
-  const isCoverImage = url.pathname.includes('cover_image.png');
+  const isCoverImage = url.pathname.includes('cover_image');
 
   if (isHtmlRequest || isCoverImage) {
     event.respondWith(

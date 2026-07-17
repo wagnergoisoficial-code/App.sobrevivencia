@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { BookOpen, Shield, ClipboardCheck, LogIn, Printer } from "lucide-react";
-import coverImg from "../assets/images/cover_image.png";
+import coverImg from "../assets/images/cover_image.jpeg";
 
 interface CoverProps {
   onStartReading: () => void;
@@ -144,18 +144,7 @@ export default function Cover({ onStartReading, onGoToWorkbook, onGoToPrintable,
                 className="w-full flex items-center justify-center space-x-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 font-sans font-bold px-5 py-3 sm:py-3.5 rounded-xl shadow-md shadow-amber-500/10 hover:shadow-amber-500/20 transition-all cursor-pointer text-xs sm:text-sm uppercase tracking-wider"
               >
                 <ClipboardCheck className="h-4 w-4 sm:h-5 sm:w-5 text-slate-950 animate-pulse" />
-                <span>Entrar no Painel e Simuladores</span>
-              </motion.button>
-
-              <motion.button
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-                onClick={onGoToEbook}
-                className="w-full flex items-center justify-center space-x-2 bg-slate-900 hover:bg-slate-800 active:bg-slate-700 text-amber-500 border border-amber-500/20 font-sans font-bold px-5 py-3 sm:py-3.5 rounded-xl transition-all cursor-pointer text-xs sm:text-sm uppercase tracking-wider"
-              >
-                <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
-                <span>Ler Manual Completo (Ebook)</span>
+                <span>Entrar e Acessar Todo o Conteúdo</span>
               </motion.button>
             </div>
           </div>

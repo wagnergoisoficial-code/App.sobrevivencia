@@ -9,9 +9,9 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/cover_image.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "/cover_image.jpeg",
+      "sizes": "1024x1536",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ]
