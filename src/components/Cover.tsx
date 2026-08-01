@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { BookOpen, Shield, ClipboardCheck, LogIn, Printer } from "lucide-react";
+import { BookOpen, Shield, ClipboardCheck, LogIn, Printer, PlayCircle } from "lucide-react";
 import coverImg from "../assets/images/cover_image.jpeg";
 
 interface CoverProps {
@@ -151,6 +151,36 @@ export default function Cover({ onStartReading, onGoToWorkbook, onGoToPrintable,
 
         </div>
       </main>
+
+      {/* Video Section - large, below the hero */}
+      <section className="relative z-10 w-full px-4 sm:px-6 py-10 sm:py-16 border-t border-slate-900">
+        <div className="max-w-4xl mx-auto flex flex-col items-center">
+          <span className="flex items-center gap-1.5 text-[10px] sm:text-xs font-mono tracking-[0.25em] text-amber-500 font-bold uppercase mb-2">
+            <PlayCircle className="h-4 w-4" />
+            Assista Antes de Começar
+          </span>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-serif font-black tracking-tight text-slate-100 text-center mb-6 sm:mb-8 uppercase leading-tight">
+            Proteja sua Família Antes da{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500">
+              Próxima Emergência
+            </span>
+          </h2>
+          <div className="relative w-full">
+            <div className="absolute -inset-2 bg-amber-500/10 rounded-2xl blur-2xl pointer-events-none" />
+            <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl">
+              <iframe
+                className="absolute inset-0 w-full h-full border-0"
+                src="https://www.youtube-nocookie.com/embed/JBilsEOP7JY?rel=0&modestbranding=1"
+                title="Proteja sua família antes da próxima emergência."
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Simplified, premium footer info */}
       <footer className="border-t border-slate-900 bg-slate-950/90 py-3 sm:py-4 text-center text-[9px] sm:text-xs font-mono text-slate-500 z-10 flex-shrink-0">
