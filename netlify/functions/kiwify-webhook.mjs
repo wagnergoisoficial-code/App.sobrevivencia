@@ -97,27 +97,13 @@ export const handler = async (event) => {
     };
   }
 
-  if (!WEBHOOK_SECRET) {
-    console.error("KIWIFY_WEBHOOK_SECRET não configurado; recusando o webhook.");
-    return { statusCode: 500, body: JSON.stringify({ error: "Webhook não configurado" }) };
-  }
-
-  const signature = event.queryStringParameters?.signature;
-  if (!signature) {
-    return { statusCode: 401, body: JSON.stringify({ error: "Assinatura ausente" }) };
-  }
-
   const rawBody = event.isBase64Encoded
     ? Buffer.from(event.body || "", "base64")
     : Buffer.from(event.body || "", "utf8");
+  const signature = event.queryStringParameters?.signature;
 
-  if (!signatureMatches(rawBody, signature, WEBHOOK_SECRET)) {
-    console.warn("Webhook recusado: assinatura inválida.");
-    return { statusCode: 401, body: JSON.stringify({ error: "Assinatura inválida" }) };
-  }
-
-  // TEMP: capture the exact raw body Kiwify sends, so it can be inspected in
-  // Firestore. Remove after diagnosing.
+  // TEMP: capture EVERY POST's raw body so the deploy can be verified and the
+  // real Kiwify body inspected. Remove after diagnosing.
   try {
     await fetch(
       `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/_diag/last?key=${API_KEY}`,
@@ -127,6 +113,7 @@ export const handler = async (event) => {
         body: JSON.stringify({
           fields: {
             raw: { stringValue: rawBody.toString("utf8").slice(0, 4000) },
+            hasSignature: { booleanValue: !!signature },
             contentType: { stringValue: event.headers?.["content-type"] || "?" },
             at: { stringValue: new Date().toISOString() },
           },
@@ -134,6 +121,20 @@ export const handler = async (event) => {
       },
     );
   } catch {}
+
+  if (!WEBHOOK_SECRET) {
+    console.error("KIWIFY_WEBHOOK_SECRET não configurado; recusando o webhook.");
+    return { statusCode: 500, body: JSON.stringify({ error: "Webhook não configurado" }) };
+  }
+
+  if (!signature) {
+    return { statusCode: 401, body: JSON.stringify({ error: "Assinatura ausente" }) };
+  }
+
+  if (!signatureMatches(rawBody, signature, WEBHOOK_SECRET)) {
+    console.warn("Webhook recusado: assinatura inválida.");
+    return { statusCode: 401, body: JSON.stringify({ error: "Assinatura inválida" }) };
+  }
 
   let body;
   try {
