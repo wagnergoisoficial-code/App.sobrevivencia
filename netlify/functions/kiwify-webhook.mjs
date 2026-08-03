@@ -110,6 +110,16 @@ export const handler = async (event) => {
     order?.webhook_event_type === "order_approved";
   const email = extractEmail(order);
 
+  // TEMP diagnostic — remove after confirming the flow works end to end.
+  console.log("KIWIFY_DEBUG", JSON.stringify({
+    topKeys: Object.keys(body || {}),
+    hasOrderKey: !!body?.order,
+    orderStatus,
+    eventType: order?.webhook_event_type,
+    email,
+    isApproved,
+  }));
+
   if (!isApproved) {
     return { statusCode: 200, body: JSON.stringify({ message: "Status ignorado" }) };
   }
@@ -131,6 +141,7 @@ export const handler = async (event) => {
       }),
     });
     const signUpData = await signUp.json();
+    console.log("KIWIFY_DEBUG signUp:", signUp.status, signUpData?.error?.message || "ok");
 
     if (!signUp.ok && signUpData?.error?.message !== "EMAIL_EXISTS") {
       console.error("Falha ao criar conta:", signUpData?.error?.message);
