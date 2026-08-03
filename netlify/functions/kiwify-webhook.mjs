@@ -74,6 +74,29 @@ export const handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: "Método não permitido" }) };
   }
 
+  // TEMP diagnostic bypass — echoes how the posted body parses, no signature
+  // check and NO side effects (no account, no email). Remove after debugging.
+  if (event.queryStringParameters?.diag === "d1ag-k9x2-2026") {
+    const raw = event.isBase64Encoded
+      ? Buffer.from(event.body || "", "base64")
+      : Buffer.from(event.body || "", "utf8");
+    let b = null;
+    try { b = JSON.parse(raw.toString("utf8")); } catch {}
+    const ord = b?.order ?? b;
+    const os = ord?.order_status ?? ord?.status;
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        version: "diag-v1",
+        topKeys: Object.keys(b || {}),
+        hasOrderKey: !!b?.order,
+        orderStatus: os ?? null,
+        eventType: ord?.webhook_event_type ?? null,
+        email: (ord?.Customer?.email ?? ord?.customer?.email ?? ord?.email) ?? null,
+      }),
+    };
+  }
+
   if (!WEBHOOK_SECRET) {
     console.error("KIWIFY_WEBHOOK_SECRET não configurado; recusando o webhook.");
     return { statusCode: 500, body: JSON.stringify({ error: "Webhook não configurado" }) };
