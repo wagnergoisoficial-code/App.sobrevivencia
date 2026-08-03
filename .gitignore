@@ -9,3 +9,5 @@ coverage/
 firebase-applet-config.json
 functions/lib/
 .firebase/
+# stray dump of the env that broke Netlify's secret scanning; never commit it
+var
