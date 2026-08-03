@@ -40,15 +40,6 @@ export default function EbookReader({ onBackToCover }: EbookReaderProps) {
           </div>
           <a
             href="/ebook/manual-sobrevivencia.pdf"
-            download="Manual Completo de Sobrevivencia Apocaliptica - Edicao 3.0 Premium.pdf"
-            className="flex items-center space-x-1 text-[10px] text-amber-500 hover:text-amber-400 hover:underline font-bold uppercase tracking-wider cursor-pointer"
-            id="link-ebook-download"
-          >
-            <span>Baixar</span>
-            <Download className="h-3 w-3" />
-          </a>
-          <a
-            href="/ebook/manual-sobrevivencia.pdf"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-1 text-[10px] text-amber-500 hover:text-amber-400 hover:underline font-bold uppercase tracking-wider cursor-pointer"
@@ -59,6 +50,22 @@ export default function EbookReader({ onBackToCover }: EbookReaderProps) {
           </a>
         </div>
       </header>
+
+      {/* Prominent primary action: download the full PDF */}
+      <div className="px-4 md:px-6 py-3 bg-slate-950 border-b border-slate-800 shrink-0 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+        <a
+          href="/ebook/manual-sobrevivencia.pdf"
+          download="Manual Completo de Sobrevivencia Apocaliptica - Edicao 3.0 Premium.pdf"
+          className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold px-6 sm:px-10 py-3.5 rounded-xl text-sm sm:text-base uppercase tracking-wider shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98] cursor-pointer"
+          id="btn-ebook-download-primary"
+        >
+          <Download className="h-5 w-5" />
+          <span>Baixar Manual Completo em PDF</span>
+        </a>
+        <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider text-center">
+          Salve no seu dispositivo &bull; Acesso vitalício
+        </p>
+      </div>
 
       {/* Main Content Area: PDF Visualizer */}
       <main className="flex-grow p-4 md:p-6 bg-slate-950 flex flex-col overflow-hidden relative">
