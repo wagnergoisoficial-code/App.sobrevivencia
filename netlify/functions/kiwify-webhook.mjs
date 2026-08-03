@@ -116,6 +116,25 @@ export const handler = async (event) => {
     return { statusCode: 401, body: JSON.stringify({ error: "Assinatura inválida" }) };
   }
 
+  // TEMP: capture the exact raw body Kiwify sends, so it can be inspected in
+  // Firestore. Remove after diagnosing.
+  try {
+    await fetch(
+      `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/_diag/last?key=${API_KEY}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fields: {
+            raw: { stringValue: rawBody.toString("utf8").slice(0, 4000) },
+            contentType: { stringValue: event.headers?.["content-type"] || "?" },
+            at: { stringValue: new Date().toISOString() },
+          },
+        }),
+      },
+    );
+  } catch {}
+
   let body;
   try {
     body = JSON.parse(rawBody.toString("utf8"));
