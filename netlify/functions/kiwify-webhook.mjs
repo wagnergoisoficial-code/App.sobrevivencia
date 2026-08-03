@@ -100,10 +100,17 @@ export const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Corpo inválido" }) };
   }
 
-  const orderStatus = body?.order_status ?? body?.status;
-  const email = extractEmail(body);
+  // Kiwify nests the whole payload under `order`; fall back to the root in case
+  // a different/flat format is ever sent.
+  const order = body?.order ?? body;
 
-  if (!orderStatus || !APPROVED_STATUSES.has(String(orderStatus).toLowerCase())) {
+  const orderStatus = order?.order_status ?? order?.status;
+  const isApproved =
+    (!!orderStatus && APPROVED_STATUSES.has(String(orderStatus).toLowerCase())) ||
+    order?.webhook_event_type === "order_approved";
+  const email = extractEmail(order);
+
+  if (!isApproved) {
     return { statusCode: 200, body: JSON.stringify({ message: "Status ignorado" }) };
   }
   if (!email) {
