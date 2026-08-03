@@ -121,7 +121,21 @@ export const handler = async (event) => {
   }));
 
   if (!isApproved) {
-    return { statusCode: 200, body: JSON.stringify({ message: "Status ignorado" }) };
+    // TEMP: expose what the function actually parsed, so it shows in Kiwify's
+    // response view. Remove once the flow works.
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: "Status ignorado",
+        debug: {
+          topKeys: Object.keys(body || {}),
+          hasOrderKey: !!body?.order,
+          orderStatus: orderStatus ?? null,
+          eventType: order?.webhook_event_type ?? null,
+          emailFound: !!email,
+        },
+      }),
+    };
   }
   if (!email) {
     return { statusCode: 400, body: JSON.stringify({ error: "E-mail não fornecido" }) };
