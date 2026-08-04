@@ -1,12 +1,15 @@
 import crypto from "node:crypto";
+import nodemailer from "nodemailer";
 
-// Reused from the Netlify env vars already set for the frontend build. The web
-// API key is public by design (it ships in the browser bundle); the only secret
-// added specifically for this function is KIWIFY_WEBHOOK_SECRET.
+// The web API key is public by design (it ships in the browser bundle). The real
+// secrets — the Kiwify token and the Gmail app password — are set only here.
 const WEBHOOK_SECRET = process.env.KIWIFY_WEBHOOK_SECRET;
 const API_KEY = process.env.VITE_FIREBASE_API_KEY;
 const PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID;
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
+const SITE_URL = "https://appmanualcompleto.com";
 const IDENTITY = "https://identitytoolkit.googleapis.com/v1/accounts";
 
 const APPROVED_STATUSES = new Set([
@@ -20,10 +23,9 @@ const APPROVED_STATUSES = new Set([
 
 /**
  * Kiwify signs the exact bytes it POSTs, so the HMAC must run over the raw body.
- * Netlify hands us event.body unparsed, which is precisely what we need — parsing
- * and re-serializing would change the bytes (spacing, unicode) and never match.
- * Kiwify does not publish which digest its sales webhook uses, so both are tried;
- * each still requires the shared secret, so accepting both weakens nothing.
+ * Netlify hands us event.body unparsed, which is precisely what we need. Kiwify
+ * does not publish which digest its sales webhook uses, so both are tried; each
+ * still requires the shared secret, so accepting both weakens nothing.
  */
 function signatureMatches(rawBody, received, secret) {
   return ["sha1", "sha256"].some((algorithm) => {
@@ -34,22 +36,77 @@ function signatureMatches(rawBody, received, secret) {
   });
 }
 
-function extractEmail(body) {
-  const raw = body?.Customer?.email ?? body?.customer?.email ?? body?.email;
+// Kiwify sends the order fields flat at the top level; some views wrap them in
+// `order`, so fall back to that.
+function getOrder(body) {
+  return body?.order ?? body;
+}
+
+function extractEmail(order) {
+  const raw = order?.Customer?.email ?? order?.customer?.email ?? order?.email;
   return typeof raw === "string" ? raw.trim().toLowerCase() : undefined;
 }
 
-async function sendPasswordEmail(email) {
-  const res = await fetch(`${IDENTITY}:sendOobCode?key=${API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ requestType: "PASSWORD_RESET", email }),
-  });
-  return res.ok ? null : await res.text();
+// A fresh, unique password per buyer. Readable alphabet (no 0/O/1/l ambiguity),
+// guaranteed to contain a digit and an uppercase letter to satisfy any policy.
+function generatePassword() {
+  const lower = "abcdefghijkmnpqrstuvwxyz";
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const digits = "23456789";
+  const all = lower + upper + digits;
+  const pick = (set) => set[crypto.randomInt(set.length)];
+  let pwd = pick(upper) + pick(digits);
+  for (let i = 0; i < 8; i++) pwd += pick(all);
+  // shuffle so the guaranteed chars aren't always first
+  return pwd
+    .split("")
+    .sort(() => crypto.randomInt(3) - 1)
+    .join("");
 }
 
-// Best-effort record of the buyer; never blocks the response. Uses the buyer's
-// own token so it obeys the existing Firestore rule (a user may write own doc).
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+});
+
+async function sendAccessEmail(to, password, isNew) {
+  const access = isNew
+    ? `<p style="margin:0 0 6px"><strong>E-mail:</strong> ${to}</p>
+       <p style="margin:0 0 6px"><strong>Senha:</strong> <span style="font-family:monospace;font-size:18px;color:#b45309">${password}</span></p>
+       <p style="margin:12px 0 0;font-size:13px;color:#64748b">Recomendamos trocar a senha depois de entrar.</p>`
+    : `<p style="margin:0">Você já tem acesso. Entre com o e-mail <strong>${to}</strong> e a senha que enviamos na sua primeira compra. Esqueceu? Use a opção "Esqueceu a senha?" no site.</p>`;
+
+  const html = `<!doctype html><html><body style="margin:0;background:#0f172a;padding:24px;font-family:Arial,Helvetica,sans-serif">
+    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden">
+      <div style="background:#0f172a;padding:20px 24px;border-bottom:3px solid #f59e0b">
+        <span style="color:#f59e0b;font-weight:bold;letter-spacing:1px;text-transform:uppercase;font-size:13px">Manual de Sobrevivência • Método 5P</span>
+      </div>
+      <div style="padding:24px">
+        <h1 style="margin:0 0 14px;font-size:20px;color:#0f172a">Seu acesso foi liberado 🎉</h1>
+        <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.5">Obrigado pela sua compra! Aqui estão seus dados de acesso ao Manual Completo de Sobrevivência Apocalíptica:</p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;color:#0f172a;font-size:15px">${access}</div>
+        <a href="${SITE_URL}" style="display:inline-block;margin:20px 0 6px;background:#f59e0b;color:#0f172a;font-weight:bold;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px">Acessar o Manual</a>
+        <p style="margin:16px 0 0;font-size:12px;color:#94a3b8">Se você não fez esta compra, ignore este e-mail.</p>
+      </div>
+    </div>
+  </body></html>`;
+
+  const text = isNew
+    ? `Seu acesso foi liberado!\n\nE-mail: ${to}\nSenha: ${password}\n\nAcesse: ${SITE_URL}\n(recomendamos trocar a senha depois de entrar)`
+    : `Você já tem acesso. Entre em ${SITE_URL} com o e-mail ${to} e sua senha. Esqueceu? Use "Esqueceu a senha?" no site.`;
+
+  await transporter.sendMail({
+    from: `"Manual de Sobrevivência" <${GMAIL_USER}>`,
+    to,
+    subject: "Seu acesso ao Manual Completo de Sobrevivência",
+    html,
+    text,
+  });
+}
+
+// Best-effort record of the buyer; never blocks the response.
 async function recordPurchase(idToken, uid, email, orderStatus) {
   if (!idToken || !PROJECT_ID) return;
   const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${uid}`;
@@ -74,20 +131,19 @@ export const handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: "Método não permitido" }) };
   }
 
+  if (!WEBHOOK_SECRET || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.error("Webhook mal configurado: falta KIWIFY_WEBHOOK_SECRET ou credenciais Gmail.");
+    return { statusCode: 500, body: JSON.stringify({ error: "Webhook não configurado" }) };
+  }
+
   const rawBody = event.isBase64Encoded
     ? Buffer.from(event.body || "", "base64")
     : Buffer.from(event.body || "", "utf8");
   const signature = event.queryStringParameters?.signature;
 
-  if (!WEBHOOK_SECRET) {
-    console.error("KIWIFY_WEBHOOK_SECRET não configurado; recusando o webhook.");
-    return { statusCode: 500, body: JSON.stringify({ error: "Webhook não configurado" }) };
-  }
-
   if (!signature) {
     return { statusCode: 401, body: JSON.stringify({ error: "Assinatura ausente" }) };
   }
-
   if (!signatureMatches(rawBody, signature, WEBHOOK_SECRET)) {
     console.warn("Webhook recusado: assinatura inválida.");
     return { statusCode: 401, body: JSON.stringify({ error: "Assinatura inválida" }) };
@@ -100,10 +156,7 @@ export const handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Corpo inválido" }) };
   }
 
-  // Kiwify nests the whole payload under `order`; fall back to the root in case
-  // a different/flat format is ever sent.
-  const order = body?.order ?? body;
-
+  const order = getOrder(body);
   const orderStatus = order?.order_status ?? order?.status;
   const isApproved =
     (!!orderStatus && APPROVED_STATUSES.has(String(orderStatus).toLowerCase())) ||
@@ -118,36 +171,34 @@ export const handler = async (event) => {
   }
 
   try {
-    // Create the account with a throwaway password. The buyer never sees it —
-    // the email below lets them set their own. A repeat purchase returns
-    // EMAIL_EXISTS, which is fine: we still send the access email.
+    // Unique password for THIS buyer.
+    const password = generatePassword();
     const signUp = await fetch(`${IDENTITY}:signUp?key=${API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        password: crypto.randomBytes(32).toString("hex"),
-        returnSecureToken: true,
-      }),
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
     });
     const signUpData = await signUp.json();
 
-    if (!signUp.ok && signUpData?.error?.message !== "EMAIL_EXISTS") {
+    const isNew = signUp.ok;
+    if (!isNew && signUpData?.error?.message !== "EMAIL_EXISTS") {
       console.error("Falha ao criar conta:", signUpData?.error?.message);
       return { statusCode: 500, body: JSON.stringify({ error: "Falha ao criar conta" }) };
     }
 
-    if (signUp.ok) {
+    if (isNew) {
       await recordPurchase(signUpData.idToken, signUpData.localId, email, orderStatus);
     }
 
-    const emailError = await sendPasswordEmail(email);
-    if (emailError) {
-      console.error("Falha ao enviar e-mail de senha:", emailError);
+    // Send the access email from the seller's Gmail (good inbox delivery).
+    try {
+      await sendAccessEmail(email, password, isNew);
+    } catch (mailErr) {
+      console.error("Falha ao enviar e-mail:", mailErr?.message || mailErr);
       return { statusCode: 500, body: JSON.stringify({ error: "Conta pronta, mas o e-mail falhou" }) };
     }
 
-    console.log(`Acesso liberado para ${email} (status: ${orderStatus})`);
+    console.log(`Acesso liberado para ${email} (novo: ${isNew})`);
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (err) {
     console.error("Erro ao processar o webhook:", err);
