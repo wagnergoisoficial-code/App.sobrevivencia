@@ -98,7 +98,7 @@ async function sendAccessEmail(to, password, isNew) {
     : `Você já tem acesso. Entre em ${SITE_URL} com o e-mail ${to} e sua senha. Esqueceu? Use "Esqueceu a senha?" no site.`;
 
   await transporter.sendMail({
-    from: `"Manual de Sobrevivência" <${GMAIL_USER}>`,
+    from: `"Wagner Gois" <${GMAIL_USER}>`,
     to,
     subject: "Seu acesso ao Manual Completo de Sobrevivência",
     html,
