@@ -141,6 +141,24 @@ export const handler = async (event) => {
     : Buffer.from(event.body || "", "utf8");
   const signature = event.queryStringParameters?.signature;
 
+  // TEMP diagnostic — capture EVERY POST so the flow is visible. Remove later.
+  let _sigValid = false;
+  try { _sigValid = !!(signature && signatureMatches(rawBody, signature, WEBHOOK_SECRET)); } catch {}
+  const _diag = async (fields) => {
+    try {
+      await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/_diag/last?key=${API_KEY}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: { at: { stringValue: new Date().toISOString() }, ...fields } }),
+      });
+    } catch {}
+  };
+  await _diag({
+    hasSignature: { booleanValue: !!signature },
+    signatureValid: { booleanValue: _sigValid },
+    bodyStart: { stringValue: rawBody.toString("utf8").slice(0, 120) },
+  });
+
   if (!signature) {
     return { statusCode: 401, body: JSON.stringify({ error: "Assinatura ausente" }) };
   }
@@ -193,8 +211,10 @@ export const handler = async (event) => {
     // Send the access email from the seller's Gmail (good inbox delivery).
     try {
       await sendAccessEmail(email, password, isNew);
+      await _diag({ step: { stringValue: "email_ok" }, isNew: { booleanValue: isNew }, emailTo: { stringValue: email } });
     } catch (mailErr) {
       console.error("Falha ao enviar e-mail:", mailErr?.message || mailErr);
+      await _diag({ step: { stringValue: "email_fail" }, mailError: { stringValue: String(mailErr?.message || mailErr).slice(0, 400) } });
       return { statusCode: 500, body: JSON.stringify({ error: "Conta pronta, mas o e-mail falhou" }) };
     }
 
