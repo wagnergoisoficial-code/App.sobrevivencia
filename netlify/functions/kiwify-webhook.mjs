@@ -131,6 +131,20 @@ export const handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: "Método não permitido" }) };
   }
 
+  // TEMP: isolated Gmail send test, triggerable without Kiwify. Remove later.
+  if (event.queryStringParameters?.diag === "mail-test-9x2") {
+    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+      return { statusCode: 200, body: JSON.stringify({ mailTest: "no-creds", hasUser: !!GMAIL_USER, hasPass: !!GMAIL_APP_PASSWORD, passLen: (GMAIL_APP_PASSWORD || "").length }) };
+    }
+    const to = event.queryStringParameters?.to || GMAIL_USER;
+    try {
+      await sendAccessEmail(to, "SenhaDeTeste123", true);
+      return { statusCode: 200, body: JSON.stringify({ mailTest: "OK", to }) };
+    } catch (e) {
+      return { statusCode: 200, body: JSON.stringify({ mailTest: "FAIL", error: String(e?.message || e).slice(0, 500) }) };
+    }
+  }
+
   if (!WEBHOOK_SECRET || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
     console.error("Webhook mal configurado: falta KIWIFY_WEBHOOK_SECRET ou credenciais Gmail.");
     return { statusCode: 500, body: JSON.stringify({ error: "Webhook não configurado" }) };
