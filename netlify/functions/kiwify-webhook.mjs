@@ -74,58 +74,10 @@ export const handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: "Método não permitido" }) };
   }
 
-  // TEMP diagnostic bypass — echoes how the posted body parses, no signature
-  // check and NO side effects (no account, no email). Remove after debugging.
-  if (event.queryStringParameters?.diag === "d1ag-k9x2-2026") {
-    const raw = event.isBase64Encoded
-      ? Buffer.from(event.body || "", "base64")
-      : Buffer.from(event.body || "", "utf8");
-    let b = null;
-    try { b = JSON.parse(raw.toString("utf8")); } catch {}
-    const ord = b?.order ?? b;
-    const os = ord?.order_status ?? ord?.status;
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        version: "diag-v1",
-        topKeys: Object.keys(b || {}),
-        hasOrderKey: !!b?.order,
-        orderStatus: os ?? null,
-        eventType: ord?.webhook_event_type ?? null,
-        email: (ord?.Customer?.email ?? ord?.customer?.email ?? ord?.email) ?? null,
-      }),
-    };
-  }
-
   const rawBody = event.isBase64Encoded
     ? Buffer.from(event.body || "", "base64")
     : Buffer.from(event.body || "", "utf8");
   const signature = event.queryStringParameters?.signature;
-
-  // TEMP diagnostic: record whether the signature validates and how the body
-  // parses, so the exact failure point is visible. Remove after diagnosing.
-  let sigValid = false;
-  try {
-    sigValid = !!(WEBHOOK_SECRET && signature && signatureMatches(rawBody, signature, WEBHOOK_SECRET));
-  } catch {}
-  try {
-    await fetch(
-      `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/_diag/last?key=${API_KEY}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fields: {
-            raw: { stringValue: rawBody.toString("utf8").slice(0, 4000) },
-            hasSignature: { booleanValue: !!signature },
-            signatureValid: { booleanValue: sigValid },
-            contentType: { stringValue: event.headers?.["content-type"] || "?" },
-            at: { stringValue: new Date().toISOString() },
-          },
-        }),
-      },
-    );
-  } catch {}
 
   if (!WEBHOOK_SECRET) {
     console.error("KIWIFY_WEBHOOK_SECRET não configurado; recusando o webhook.");
@@ -158,32 +110,8 @@ export const handler = async (event) => {
     order?.webhook_event_type === "order_approved";
   const email = extractEmail(order);
 
-  // TEMP diagnostic — remove after confirming the flow works end to end.
-  console.log("KIWIFY_DEBUG", JSON.stringify({
-    topKeys: Object.keys(body || {}),
-    hasOrderKey: !!body?.order,
-    orderStatus,
-    eventType: order?.webhook_event_type,
-    email,
-    isApproved,
-  }));
-
   if (!isApproved) {
-    // TEMP: expose what the function actually parsed, so it shows in Kiwify's
-    // response view. Remove once the flow works.
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: "Status ignorado",
-        debug: {
-          topKeys: Object.keys(body || {}),
-          hasOrderKey: !!body?.order,
-          orderStatus: orderStatus ?? null,
-          eventType: order?.webhook_event_type ?? null,
-          emailFound: !!email,
-        },
-      }),
-    };
+    return { statusCode: 200, body: JSON.stringify({ message: "Status ignorado" }) };
   }
   if (!email) {
     return { statusCode: 400, body: JSON.stringify({ error: "E-mail não fornecido" }) };
@@ -203,7 +131,6 @@ export const handler = async (event) => {
       }),
     });
     const signUpData = await signUp.json();
-    console.log("KIWIFY_DEBUG signUp:", signUp.status, signUpData?.error?.message || "ok");
 
     if (!signUp.ok && signUpData?.error?.message !== "EMAIL_EXISTS") {
       console.error("Falha ao criar conta:", signUpData?.error?.message);
