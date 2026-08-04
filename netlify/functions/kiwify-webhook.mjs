@@ -102,8 +102,12 @@ export const handler = async (event) => {
     : Buffer.from(event.body || "", "utf8");
   const signature = event.queryStringParameters?.signature;
 
-  // TEMP: capture EVERY POST's raw body so the deploy can be verified and the
-  // real Kiwify body inspected. Remove after diagnosing.
+  // TEMP diagnostic: record whether the signature validates and how the body
+  // parses, so the exact failure point is visible. Remove after diagnosing.
+  let sigValid = false;
+  try {
+    sigValid = !!(WEBHOOK_SECRET && signature && signatureMatches(rawBody, signature, WEBHOOK_SECRET));
+  } catch {}
   try {
     await fetch(
       `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/_diag/last?key=${API_KEY}`,
@@ -114,6 +118,7 @@ export const handler = async (event) => {
           fields: {
             raw: { stringValue: rawBody.toString("utf8").slice(0, 4000) },
             hasSignature: { booleanValue: !!signature },
+            signatureValid: { booleanValue: sigValid },
             contentType: { stringValue: event.headers?.["content-type"] || "?" },
             at: { stringValue: new Date().toISOString() },
           },
