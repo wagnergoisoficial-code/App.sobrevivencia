@@ -7,7 +7,6 @@ import {
   Compass,
   ArrowLeft,
   LogIn,
-  User,
   Droplet,
   Coffee,
   HeartPulse,
@@ -19,8 +18,8 @@ import {
 
 interface SidebarProps {
   selectedItemId: string;
-  selectedItemType: "workbook" | "author" | "ebook";
-  onSelectItem: (id: string, type: "workbook" | "author" | "ebook") => void;
+  selectedItemType: "workbook" | "ebook";
+  onSelectItem: (id: string, type: "workbook" | "ebook") => void;
   onBackToCover: () => void;
   userEmail: string | null;
   onLogout: () => void;
@@ -156,24 +155,9 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* Section: Autor */}
+          {/* Section: Informações */}
           <div className="space-y-1 pt-3 border-t border-slate-900">
             <h3 className="text-[10px] font-mono uppercase tracking-widest text-slate-500 px-2.5 mb-2 font-bold">Informações</h3>
-            
-            <button
-              onClick={() => {
-                onSelectItem("author", "author");
-                setIsOpen(false);
-              }}
-              className={`w-full text-left px-3 py-2.5 rounded flex items-center space-x-2.5 text-xs font-medium cursor-pointer transition-all border ${
-                selectedItemType === "author"
-                  ? "bg-amber-500/10 border-amber-500/20 text-amber-400 font-semibold shadow-sm"
-                  : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
-              }`}
-            >
-              <User className={`h-4 w-4 ${selectedItemType === "author" ? "text-amber-400" : "text-slate-500"}`} />
-              <span>Sobre o Autor</span>
-            </button>
 
             <button
               onClick={() => {

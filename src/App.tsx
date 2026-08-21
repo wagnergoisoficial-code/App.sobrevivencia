@@ -8,7 +8,6 @@ import Cover from "./components/Cover";
 import Sidebar from "./components/Sidebar";
 import Workbook from "./components/Workbook";
 import AuthModal from "./components/AuthModal";
-import Author from "./components/Author";
 import EbookReader from "./components/EbookReader";
 
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -128,7 +127,7 @@ const INITIAL_PROGRESS: UserProgress = {
 type ActiveTabType = "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios";
 
 export default function App() {
-  const [view, setView] = useState<"cover" | "workbook" | "author" | "ebook">(() => {
+  const [view, setView] = useState<"cover" | "workbook" | "ebook">(() => {
     if (window.location.pathname === "/ebook") {
       return "ebook";
     }
@@ -145,7 +144,7 @@ export default function App() {
     }
     return "workbook";
   });
-  const [selectedItemType, setSelectedItemType] = useState<"workbook" | "author" | "ebook">(() => {
+  const [selectedItemType, setSelectedItemType] = useState<"workbook" | "ebook">(() => {
     if (window.location.pathname === "/ebook") {
       return "ebook";
     }
@@ -288,13 +287,11 @@ export default function App() {
   };
 
   // Selection Callback
-  const handleSelectItem = (id: string, type: "workbook" | "author" | "ebook") => {
+  const handleSelectItem = (id: string, type: "workbook" | "ebook") => {
     setSelectedItemId(id);
     setSelectedItemType(type);
     if (type === "workbook") {
       setView("workbook");
-    } else if (type === "author") {
-      setView("author");
     } else if (type === "ebook") {
       setView("ebook");
     }
@@ -383,7 +380,6 @@ export default function App() {
               setActiveTab={setActiveTab}
             />
           )}
-          {view === "author" && <Author />}
           {view === "ebook" && (
             <EbookReader onBackToCover={() => setView("cover")} />
           )}
