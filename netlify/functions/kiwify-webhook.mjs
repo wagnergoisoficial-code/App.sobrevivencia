@@ -9,6 +9,16 @@ const PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID;
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
+// Deliverability: a personal Gmail sending identical transactional mail to
+// strangers is filtered as bulk, and its From domain (gmail.com) does not match
+// the link domain, which is itself a spam signal. Resend sends from
+// appmanualcompleto.com with SPF/DKIM/DMARC on that domain, so the message is
+// authenticated and aligned. Gmail stays as the fallback until RESEND_API_KEY
+// is configured, so nothing breaks in between.
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const MAIL_FROM = process.env.MAIL_FROM || `Wagner Gois <${GMAIL_USER}>`;
+const MAIL_REPLY_TO = process.env.MAIL_REPLY_TO || GMAIL_USER;
+
 const SITE_URL = "https://appmanualcompleto.com";
 const IDENTITY = "https://identitytoolkit.googleapis.com/v1/accounts";
 
@@ -71,6 +81,24 @@ const transporter = nodemailer.createTransport({
   auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
 });
 
+async function deliver({ to, subject, html, text }) {
+  if (RESEND_API_KEY) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from: MAIL_FROM, to: [to], reply_to: MAIL_REPLY_TO, subject, html, text }),
+    });
+    if (!res.ok) {
+      throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    return;
+  }
+  await transporter.sendMail({ from: MAIL_FROM, replyTo: MAIL_REPLY_TO, to, subject, html, text });
+}
+
 async function sendAccessEmail(to, password, isNew) {
   const access = isNew
     ? `<p style="margin:0 0 6px"><strong>E-mail:</strong> ${to}</p>
@@ -84,11 +112,11 @@ async function sendAccessEmail(to, password, isNew) {
         <span style="color:#f59e0b;font-weight:bold;letter-spacing:1px;text-transform:uppercase;font-size:13px">Manual de Sobrevivência • Método 5P</span>
       </div>
       <div style="padding:24px">
-        <h1 style="margin:0 0 14px;font-size:20px;color:#0f172a">Seu acesso foi liberado 🎉</h1>
+        <h1 style="margin:0 0 14px;font-size:20px;color:#0f172a">Seu acesso foi liberado</h1>
         <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.5">Obrigado pela sua compra! Aqui estão seus dados de acesso ao Manual Completo de Sobrevivência Apocalíptica:</p>
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;color:#0f172a;font-size:15px">${access}</div>
         <a href="${SITE_URL}" style="display:inline-block;margin:20px 0 6px;background:#f59e0b;color:#0f172a;font-weight:bold;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px">Acessar o Manual</a>
-        <p style="margin:16px 0 0;font-size:12px;color:#94a3b8">Se você não fez esta compra, ignore este e-mail.</p>
+        <p style="margin:16px 0 0;font-size:12px;color:#94a3b8">Este e-mail foi enviado porque a sua compra do Manual Completo de Sobrevivência Apocalíptica foi aprovada. Em caso de dúvida, basta responder esta mensagem.</p>
       </div>
     </div>
   </body></html>`;
@@ -97,8 +125,7 @@ async function sendAccessEmail(to, password, isNew) {
     ? `Seu acesso foi liberado!\n\nE-mail: ${to}\nSenha: ${password}\n\nAcesse: ${SITE_URL}\n(recomendamos trocar a senha depois de entrar)`
     : `Você já tem acesso. Entre em ${SITE_URL} com o e-mail ${to} e sua senha. Esqueceu? Use "Esqueceu a senha?" no site.`;
 
-  await transporter.sendMail({
-    from: `"Wagner Gois" <${GMAIL_USER}>`,
+  await deliver({
     to,
     subject: "Seu acesso ao Manual Completo de Sobrevivência",
     html,
@@ -131,22 +158,9 @@ export const handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: "Método não permitido" }) };
   }
 
-  // TEMP: isolated Gmail send test, triggerable without Kiwify. Remove later.
-  if (event.queryStringParameters?.diag === "mail-test-9x2") {
-    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
-      return { statusCode: 200, body: JSON.stringify({ mailTest: "no-creds", hasUser: !!GMAIL_USER, hasPass: !!GMAIL_APP_PASSWORD, passLen: (GMAIL_APP_PASSWORD || "").length }) };
-    }
-    const to = event.queryStringParameters?.to || GMAIL_USER;
-    try {
-      await sendAccessEmail(to, "SenhaDeTeste123", true);
-      return { statusCode: 200, body: JSON.stringify({ mailTest: "OK", to }) };
-    } catch (e) {
-      return { statusCode: 200, body: JSON.stringify({ mailTest: "FAIL", error: String(e?.message || e).slice(0, 500) }) };
-    }
-  }
-
-  if (!WEBHOOK_SECRET || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
-    console.error("Webhook mal configurado: falta KIWIFY_WEBHOOK_SECRET ou credenciais Gmail.");
+  const canSendMail = !!RESEND_API_KEY || !!(GMAIL_USER && GMAIL_APP_PASSWORD);
+  if (!WEBHOOK_SECRET || !canSendMail) {
+    console.error("Webhook mal configurado: falta KIWIFY_WEBHOOK_SECRET ou um canal de envio (RESEND_API_KEY ou credenciais Gmail).");
     return { statusCode: 500, body: JSON.stringify({ error: "Webhook não configurado" }) };
   }
 
@@ -154,24 +168,6 @@ export const handler = async (event) => {
     ? Buffer.from(event.body || "", "base64")
     : Buffer.from(event.body || "", "utf8");
   const signature = event.queryStringParameters?.signature;
-
-  // TEMP diagnostic — capture EVERY POST so the flow is visible. Remove later.
-  let _sigValid = false;
-  try { _sigValid = !!(signature && signatureMatches(rawBody, signature, WEBHOOK_SECRET)); } catch {}
-  const _diag = async (fields) => {
-    try {
-      await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/_diag/last?key=${API_KEY}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields: { at: { stringValue: new Date().toISOString() }, ...fields } }),
-      });
-    } catch {}
-  };
-  await _diag({
-    hasSignature: { booleanValue: !!signature },
-    signatureValid: { booleanValue: _sigValid },
-    bodyStart: { stringValue: rawBody.toString("utf8").slice(0, 120) },
-  });
 
   if (!signature) {
     return { statusCode: 401, body: JSON.stringify({ error: "Assinatura ausente" }) };
@@ -225,11 +221,13 @@ export const handler = async (event) => {
     // Send the access email from the seller's Gmail (good inbox delivery).
     try {
       await sendAccessEmail(email, password, isNew);
-      await _diag({ step: { stringValue: "email_ok" }, isNew: { booleanValue: isNew }, emailTo: { stringValue: email } });
     } catch (mailErr) {
-      console.error("Falha ao enviar e-mail:", mailErr?.message || mailErr);
-      await _diag({ step: { stringValue: "email_fail" }, mailError: { stringValue: String(mailErr?.message || mailErr).slice(0, 400) } });
-      return { statusCode: 500, body: JSON.stringify({ error: "Conta pronta, mas o e-mail falhou" }) };
+      // The account already exists at this point, so a retry from Kiwify would
+      // only hit EMAIL_EXISTS and mail the buyer the "you already have access"
+      // text — without ever giving them a password. Ack the delivery and let the
+      // buyer use "Esqueceu a senha?" instead of triggering a retry storm.
+      console.error(`Falha ao enviar e-mail de acesso para ${email}:`, mailErr?.message || mailErr);
+      return { statusCode: 200, body: JSON.stringify({ success: true, mailFailed: true }) };
     }
 
     console.log(`Acesso liberado para ${email} (novo: ${isNew})`);
