@@ -212,6 +212,8 @@ async function registrarCompra(idToken, uid, email, sessao) {
         amountTotal: { integerValue: String(sessao?.amount_total ?? 0) },
         currency: { stringValue: sessao?.currency ?? "" },
         clientReference: { stringValue: sessao?.client_reference_id ?? "" },
+        utmSource: { stringValue: sessao?.metadata?.utm_source ?? "" },
+        utmCampaign: { stringValue: sessao?.metadata?.utm_campaign ?? "" },
       },
     }),
   }).catch(() => {});
@@ -223,7 +225,10 @@ function hashSha256(valor) {
 }
 
 /**
- * Desempacota o client_reference_id que a página de vendas montou.
+ * Desempacota o client_reference_id do checkout hospedado.
+ *
+ * Só entra em ação no caminho de contingência: a sessão criada pelo nosso servidor traz
+ * os mesmos dados em metadata, sem limite de 200 caracteres e sem codificação.
  *
  * Formato "fb1-<base64url(fbc|fbp)>". O prefixo é a versão: se um dia o conteúdo
  * mudar, o prefixo muda junto e este código continua sabendo ler o formato antigo.
@@ -263,10 +268,27 @@ async function enviarPurchaseAoMeta(sessao, email, carimboDoEvento) {
     return;
   }
 
-  const { fbc, fbp } = desempacotarReferencia(sessao?.client_reference_id);
+  // Duas origens, por ordem de riqueza.
+  //
+  // O checkout embutido cria a sessão pelo nosso servidor e escreve tudo em metadata —
+  // inclusive o IP e o user-agent do comprador, que ali são autênticos porque quem
+  // chamou a função foi o navegador dele.
+  //
+  // O link hospedado do Stripe (a rede de segurança, usada se a sessão embutida falhar)
+  // não tem metadata: ele só consegue carregar o client_reference_id, com fbc e fbp
+  // espremidos em 200 caracteres. Vale menos, mas é melhor que nada — e enquanto esse
+  // caminho existir, este código precisa entender os dois.
+  const meta = sessao?.metadata ?? {};
+  const doReference = desempacotarReferencia(sessao?.client_reference_id);
+
+  const fbc = meta.fbc || doReference.fbc;
+  const fbp = meta.fbp || doReference.fbp;
+
   const dadosDoUsuario = { em: [hashSha256(email)] };
   if (fbc) dadosDoUsuario.fbc = fbc;
   if (fbp) dadosDoUsuario.fbp = fbp;
+  if (meta.client_ip) dadosDoUsuario.client_ip_address = meta.client_ip;
+  if (meta.client_user_agent) dadosDoUsuario.client_user_agent = meta.client_user_agent;
 
   const corpo = {
     data: [
@@ -298,7 +320,10 @@ async function enviarPurchaseAoMeta(sessao, email, carimboDoEvento) {
   if (!res.ok) {
     throw new Error(`Meta ${res.status}: ${resposta.slice(0, 300)}`);
   }
-  console.log(`Purchase enviado ao Meta (sessão ${sessao?.id}, fbc:${!!fbc} fbp:${!!fbp}): ${resposta.slice(0, 160)}`);
+  console.log(
+    `Purchase enviado ao Meta (sessão ${sessao?.id}, fbc:${!!fbc} fbp:${!!fbp} ` +
+    `ip:${!!meta.client_ip} ua:${!!meta.client_user_agent}): ${resposta.slice(0, 160)}`,
+  );
 }
 
 export const handler = async (event) => {
