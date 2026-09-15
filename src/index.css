@@ -1,10 +1,33 @@
-@import "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&display=swap";
+@import "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Barlow+Condensed:wght@500;600;700&display=swap";
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-serif: "Playfair Display", Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Public landing (Cover) */
+  --font-condensed: "Barlow Condensed", "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+  --color-bunker-bg: #0b0b0c;
+  --color-bunker-surface: #121213;
+  --color-bunker-raised: #191919;
+  --color-bunker-cream: #f5f1ea;
+  --color-bunker-muted: #a9a29a;
+  --color-bunker-amber: #f3b340;
+  --color-bunker-amber-light: #ffc85c;
+
+  --animate-cover-glow: cover-glow 9s ease-in-out infinite alternate;
+
+  @keyframes cover-glow {
+    from {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0.8;
+      transform: scale(1.04);
+    }
+  }
 }
 
 @layer utilities {

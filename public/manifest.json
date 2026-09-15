@@ -9,7 +9,7 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/cover_image.jpeg",
+      "src": "/capa-manual-5p.jpg",
       "sizes": "1024x1536",
       "type": "image/jpeg",
       "purpose": "any maskable"
