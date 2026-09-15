@@ -121,10 +121,11 @@ const INITIAL_PROGRESS: UserProgress = {
     financas: 2,
     documentos: 2,
     psicologia: 3
-  }
+  },
+  mapPoints: []
 };
 
-type ActiveTabType = "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios";
+type ActiveTabType = "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "map" | "scenarios";
 
 export default function App() {
   const [view, setView] = useState<"cover" | "workbook" | "ebook">(() => {

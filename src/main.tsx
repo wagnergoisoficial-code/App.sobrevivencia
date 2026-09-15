@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { precacheLoadedAssets } from './lib/precacheAssets';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -37,6 +38,8 @@ if ('serviceWorker' in navigator) {
       .catch((err) => {
         console.error('[Bunker OS] Falha ao registrar o Service Worker offline:', err);
       });
+
+    precacheLoadedAssets();
   });
 }
 

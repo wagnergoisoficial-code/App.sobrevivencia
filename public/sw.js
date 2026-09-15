@@ -1,4 +1,8 @@
 const CACHE_NAME = 'manual-sobrevivencia-pwa-v8';
+// Assets are content-hashed and never negotiated, so a Vary header (e.g. "Vary: Origin" on
+// module scripts) must not stop a cached copy from being served offline
+const MATCH_OPTIONS = { ignoreVary: true };
+
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -30,6 +34,27 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => self.clients.claim())
+  );
+});
+
+// Message Event - The page lists assets it loaded before this worker controlled it
+// (see src/lib/precacheAssets.ts); cache the ones still missing so the app opens offline
+self.addEventListener('message', (event) => {
+  if (!event.data || event.data.type !== 'CACHE_URLS' || !Array.isArray(event.data.urls)) {
+    return;
+  }
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        event.data.urls.map((url) => {
+          const target = new URL(url, self.location.origin);
+          if (target.origin !== self.location.origin) {
+            return undefined;
+          }
+          return cache.match(target.href, MATCH_OPTIONS).then((hit) => hit || cache.add(target.href).catch(() => {}));
+        })
+      )
+    )
   );
 });
 
@@ -74,15 +99,20 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
-          return caches.match(event.request);
-        })
+        .catch(() =>
+          caches.match(event.request, MATCH_OPTIONS).then((cached) => {
+            // SPA routes such as /workbook all render index.html: when this exact URL was
+            // never cached, fall back to the cached app shell so it still opens offline
+            if (cached || !isHtmlRequest) return cached;
+            return caches.match('/', MATCH_OPTIONS);
+          })
+        )
     );
     return;
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    caches.match(event.request, MATCH_OPTIONS).then((cachedResponse) => {
       if (cachedResponse) {
         // Serve from cache immediately, but fetch a fresh copy in the background
         fetch(event.request)
@@ -117,7 +147,7 @@ self.addEventListener('fetch', (event) => {
         .catch(() => {
           // Offline fallback for navigation requests (render the SPA index.html)
           if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/');
+            return caches.match('/', MATCH_OPTIONS);
           }
         });
     })

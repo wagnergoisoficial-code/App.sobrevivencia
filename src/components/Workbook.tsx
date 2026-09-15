@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { UserProgress } from "../types";
 import { scenariosData } from "../data/scenarios";
 import {
@@ -18,17 +18,35 @@ import {
   HelpCircle,
   FileSpreadsheet,
   ShieldAlert,
-  CheckCircle2
+  CheckCircle2,
+  Map as MapIcon
 } from "lucide-react";
+
+// Leaflet and the IBGE map data live in their own chunk. The panel fetches it in the
+// background on open, so the service worker has it cached before the user goes offline.
+const loadOfflineMap = () => import("./OfflineMap");
+const OfflineMap = lazy(loadOfflineMap);
 
 interface WorkbookProps {
   progress: UserProgress;
   onUpdateProgress: (updater: (prev: UserProgress) => UserProgress) => void;
-  activeTab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios";
-  setActiveTab: (tab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios") => void;
+  activeTab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "map" | "scenarios";
+  setActiveTab: (tab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "map" | "scenarios") => void;
 }
 
 export default function Workbook({ progress, onUpdateProgress, activeTab, setActiveTab }: WorkbookProps) {
+
+  useEffect(() => {
+    const warm = () => {
+      loadOfflineMap().catch(() => {});
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(warm, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = window.setTimeout(warm, 2000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // Local helper states for creating entries
   const [newFood, setNewFood] = useState({ item: "", qty: 1, calories: 1500, expiry: "", familyLikes: true, needsCooking: false });
@@ -251,6 +269,18 @@ export default function Workbook({ progress, onUpdateProgress, activeTab, setAct
           >
             <AlertTriangle className="h-3.5 w-3.5" />
             <span>Mapa de Risco</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("map")}
+            className={`px-3 py-1.5 rounded text-xs font-mono font-bold uppercase transition-all flex items-center space-x-1.5 border ${
+              activeTab === "map"
+                ? "bg-amber-500 text-slate-950 border-transparent"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+            }`}
+          >
+            <MapIcon className="h-3.5 w-3.5" />
+            <span>Mapa Offline</span>
           </button>
 
           <button
@@ -984,6 +1014,24 @@ export default function Workbook({ progress, onUpdateProgress, activeTab, setAct
                 </table>
               </div>
             </div>
+          )}
+
+          {/* TAB: OFFLINE MAP */}
+          {activeTab === "map" && (
+            <Suspense
+              fallback={
+                <div className="p-10 text-center text-xs font-mono uppercase tracking-wider text-slate-500">
+                  Carregando mapa offline...
+                </div>
+              }
+            >
+              <OfflineMap
+                points={progress.mapPoints ?? []}
+                onChangePoints={(update) =>
+                  onUpdateProgress((prev) => ({ ...prev, mapPoints: update(prev.mapPoints ?? []) }))
+                }
+              />
+            </Suspense>
           )}
 
           {/* TAB: CRISIS SCENARIOS */}

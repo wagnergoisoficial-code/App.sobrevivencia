@@ -1,0 +1,140 @@
+/* Offline map (Leaflet) — dark theme matching the workbook panel */
+
+.offline-map {
+  background: #020617;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Placement mode is set on a React-owned wrapper: React must never rewrite the class
+   list of the Leaflet container itself, or it would wipe Leaflet's own classes */
+.is-placing .offline-map,
+.is-placing .offline-map.leaflet-grab {
+  cursor: crosshair;
+}
+
+.offline-map .leaflet-control-zoom {
+  border: 1px solid #1e293b;
+  box-shadow: none;
+}
+
+.offline-map .leaflet-control-zoom a {
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-bottom-color: #1e293b;
+}
+
+.offline-map .leaflet-control-zoom a:hover {
+  background: #1e293b;
+  color: #f59e0b;
+}
+
+.offline-map .leaflet-control-zoom a.leaflet-disabled {
+  background: #0f172a;
+  color: #475569;
+}
+
+.offline-map .leaflet-control-scale-line {
+  background: rgba(2, 6, 23, 0.8);
+  border-color: #64748b;
+  color: #cbd5e1;
+  font-size: 11px;
+  text-shadow: none;
+}
+
+.offline-map .leaflet-control-attribution {
+  background: rgba(2, 6, 23, 0.8);
+  color: #64748b;
+  font-size: 10px;
+}
+
+/* State abbreviations and city names drawn as non-interactive labels */
+.offline-map-uf span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: rgba(148, 163, 184, 0.5);
+  font: 600 11px/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.offline-map-city span {
+  position: absolute;
+  left: 6px;
+  transform: translateY(-50%);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #020617, 0 0 3px #020617, 0 0 2px #020617;
+}
+
+.offline-map-city.is-capital span {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+/* Saved points */
+.offline-map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.offline-map-pin span {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--pin);
+  border: 2px solid #020617;
+  box-shadow: 0 0 0 2px rgba(248, 250, 252, 0.85), 0 4px 10px rgba(0, 0, 0, 0.6);
+  transition: transform 0.15s ease;
+}
+
+.offline-map-pin.is-selected span {
+  transform: scale(1.35);
+}
+
+.offline-map-pin.is-draft span {
+  background: rgba(2, 6, 23, 0.6);
+  border: 3px dashed var(--pin);
+  box-shadow: 0 0 0 2px rgba(248, 250, 252, 0.85);
+}
+
+/* User GPS position */
+.offline-map-gps span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: #38bdf8;
+  border: 3px solid #f8fafc;
+  box-shadow: 0 0 0 6px rgba(56, 189, 248, 0.25);
+}
+
+.leaflet-tooltip.offline-map-point-label {
+  background: #0f172a;
+  color: #f1f5f9;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.leaflet-tooltip-top.offline-map-point-label::before {
+  border-top-color: #334155;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offline-map-pin span {
+    transition: none;
+  }
+}

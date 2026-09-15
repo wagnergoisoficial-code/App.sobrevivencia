@@ -78,4 +78,17 @@ export interface UserProgress {
   diagnosticScores: {
     [key: string]: number; // area -> score 0-5
   };
+  // Optional: progress saved before the offline map existed has no points yet
+  mapPoints?: MapPoint[];
+}
+
+export type MapPointCategory = "encontro" | "abrigo" | "agua" | "saude" | "suprimentos" | "perigo" | "outro";
+
+export interface MapPoint {
+  id: string;
+  name: string;
+  category: MapPointCategory;
+  lat: number;
+  lng: number;
+  notes: string;
 }

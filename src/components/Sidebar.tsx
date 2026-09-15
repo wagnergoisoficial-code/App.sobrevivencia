@@ -13,7 +13,8 @@ import {
   Users,
   AlertTriangle,
   ClipboardList,
-  BookOpen
+  BookOpen,
+  Map as MapIcon
 } from "lucide-react";
 
 interface SidebarProps {
@@ -24,8 +25,8 @@ interface SidebarProps {
   userEmail: string | null;
   onLogout: () => void;
   onOpenLogin: () => void;
-  activeTab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios";
-  setActiveTab: (tab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios") => void;
+  activeTab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "map" | "scenarios";
+  setActiveTab: (tab: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "map" | "scenarios") => void;
   diagnosticScore: number;
 }
 
@@ -56,7 +57,7 @@ export default function Sidebar({
     tierLabel = "Elite Resiliente";
   }
 
-  const handleItemClick = (tabId: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "scenarios") => {
+  const handleItemClick = (tabId: "diagnostic" | "water" | "food" | "medical" | "comm" | "risk" | "map" | "scenarios") => {
     onSelectItem("workbook", "workbook");
     setActiveTab(tabId);
     setIsOpen(false); // Auto close sidebar on mobile
@@ -69,6 +70,7 @@ export default function Sidebar({
     { id: "medical", label: "Prontuário Médico", icon: HeartPulse, color: "text-rose-500" },
     { id: "comm", label: "Rede de Comunicação", icon: Users, color: "text-emerald-500" },
     { id: "risk", label: "Mapeamento de Riscos", icon: AlertTriangle, color: "text-yellow-500" },
+    { id: "map", label: "Mapa Offline", icon: MapIcon, color: "text-teal-400" },
     { id: "scenarios", label: "Simulador de Colapso", icon: ShieldAlert, color: "text-red-500" }
   ] as const;
 
