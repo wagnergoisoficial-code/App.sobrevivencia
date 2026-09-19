@@ -9,9 +9,10 @@ import nodemailer from "nodemailer";
  *
  *   1. A assinatura do Stripe é conferida sobre os bytes crus do corpo. Sem isso,
  *      qualquer pessoa que descubra a URL cria contas de graça.
- *   2. O Purchase vai para a Conversions API do Meta. O comprador termina a compra no
- *      domínio do Stripe, onde não existe pixel — este é o único lugar de onde a
- *      campanha pode ficar sabendo da venda.
+ *   2. O Purchase vai para a Conversions API do Meta. É a fonte que não falha: o
+ *      dinheiro entrou, então a venda existe mesmo que o comprador feche o navegador
+ *      antes de qualquer coisa. A página de pagamento também dispara o Purchase, com
+ *      o MESMO event_id — é assim que o Meta reconhece um evento só.
  *   3. A conta é criada e a senha é enviada por e-mail.
  *
  * O passo 2 vem antes do 3 de propósito: o dinheiro já entrou, então a venda é real
@@ -58,17 +59,26 @@ const MOEDAS_SEM_CENTAVOS = new Set([
 const TOLERANCIA_SEGUNDOS = 60 * 5;
 
 /**
- * Os dois eventos que significam dinheiro confirmado.
+ * Os eventos que podem significar dinheiro confirmado.
+ *
+ * DOIS CAMINHOS CHEGAM AQUI
+ *
+ * O checkout próprio da página de vendas cobra por PaymentIntent, porque é ele que
+ * devolve o código Pix cru para a página desenhar o QR Code do jeito dela. O link
+ * hospedado do Stripe — a rede de segurança, usada só se aquele falhar — cobra por
+ * Checkout Session. Os dois precisam liberar acesso.
+ *
+ * QUEM DECIDE É O ESTADO, NUNCA O NOME DO EVENTO
  *
  * No cartão, o checkout.session.completed já chega pago. No Pix não: a sessão fecha
  * com payment_status "unpaid" enquanto o comprador ainda vai pagar, e a confirmação
  * chega depois, em async_payment_succeeded. Tratar os dois como "pago" liberaria
- * acesso para quem só abriu o QR Code e foi embora — por isso quem decide é sempre o
- * payment_status, nunca o nome do evento.
+ * acesso para quem só abriu o QR Code e foi embora.
  */
 const EVENTOS_DE_PAGAMENTO = new Set([
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",
+  "payment_intent.succeeded",
 ]);
 
 /**
@@ -117,6 +127,52 @@ function assinaturaConfere(corpoCru, cabecalho, segredo) {
 function extrairEmail(sessao) {
   const bruto = sessao?.customer_details?.email ?? sessao?.customer_email;
   return typeof bruto === "string" ? bruto.trim().toLowerCase() : undefined;
+}
+
+function normalizarEmail(bruto) {
+  return typeof bruto === "string" && bruto.trim() ? bruto.trim().toLowerCase() : undefined;
+}
+
+/**
+ * Traduz o evento do Stripe para um formato só, seja ele sessão ou PaymentIntent.
+ *
+ * O resto do arquivo trabalha em cima do que sai daqui, e não do objeto cru. É o que
+ * permite os dois caminhos de cobrança conviverem sem espalhar "if" por toda parte.
+ *
+ * Devolve null quando o evento não é nosso — ver a nota sobre `origem` abaixo.
+ */
+function pagamentoDoEvento(evento) {
+  const objeto = evento?.data?.object;
+
+  if (evento?.type === "payment_intent.succeeded") {
+    // Uma compra pelo link hospedado gera sessão E PaymentIntent, e nós escutamos os
+    // dois. Sem este corte, a mesma venda seria processada duas vezes: dois e-mails,
+    // dois Purchase. A função que cria a cobrança do checkout próprio carimba
+    // origem="checkout-proprio"; o que não tem esse carimbo é tratado pela sessão.
+    if (objeto?.metadata?.origem !== "checkout-proprio") return null;
+
+    return {
+      id: objeto?.id,
+      pago: objeto?.status === "succeeded",
+      situacao: objeto?.status,
+      email: normalizarEmail(objeto?.receipt_email ?? objeto?.metadata?.email),
+      valor: objeto?.amount_received ?? objeto?.amount,
+      moeda: objeto?.currency,
+      metadata: objeto?.metadata ?? {},
+      clientReference: undefined,
+    };
+  }
+
+  return {
+    id: objeto?.id,
+    pago: objeto?.payment_status === "paid",
+    situacao: objeto?.payment_status,
+    email: extrairEmail(objeto),
+    valor: objeto?.amount_total,
+    moeda: objeto?.currency,
+    metadata: objeto?.metadata ?? {},
+    clientReference: objeto?.client_reference_id,
+  };
 }
 
 // Senha única por comprador. Alfabeto legível (sem 0/O/1/l), com dígito e maiúscula
@@ -194,7 +250,7 @@ async function enviarEmailDeAcesso(to, senha, ehNovo) {
  * possa, mais tarde, disparar o Purchase já atribuído ao anúncio que gerou a venda.
  * Jogá-los fora agora tornaria essa atribuição irrecuperável depois.
  */
-async function registrarCompra(idToken, uid, email, sessao) {
+async function registrarCompra(idToken, uid, email, pagamento) {
   if (!idToken || !PROJECT_ID) return;
   const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${uid}`;
   await fetch(url, {
@@ -207,13 +263,13 @@ async function registrarCompra(idToken, uid, email, sessao) {
         createdAt: { stringValue: new Date().toISOString() },
         role: { stringValue: "user" },
         stripePurchase: { booleanValue: true },
-        stripeSessionId: { stringValue: sessao?.id ?? "" },
-        purchaseStatus: { stringValue: sessao?.payment_status ?? "" },
-        amountTotal: { integerValue: String(sessao?.amount_total ?? 0) },
-        currency: { stringValue: sessao?.currency ?? "" },
-        clientReference: { stringValue: sessao?.client_reference_id ?? "" },
-        utmSource: { stringValue: sessao?.metadata?.utm_source ?? "" },
-        utmCampaign: { stringValue: sessao?.metadata?.utm_campaign ?? "" },
+        stripeSessionId: { stringValue: pagamento.id ?? "" },
+        purchaseStatus: { stringValue: pagamento.situacao ?? "" },
+        amountTotal: { integerValue: String(pagamento.valor ?? 0) },
+        currency: { stringValue: pagamento.moeda ?? "" },
+        clientReference: { stringValue: pagamento.clientReference ?? "" },
+        utmSource: { stringValue: pagamento.metadata?.utm_source ?? "" },
+        utmCampaign: { stringValue: pagamento.metadata?.utm_campaign ?? "" },
       },
     }),
   }).catch(() => {});
@@ -255,14 +311,16 @@ function valorNaUnidadeCheia(quantia, moeda) {
  * Envia o Purchase ao Meta. Nunca lança: uma falha aqui não pode custar o acesso de
  * quem pagou.
  *
- * O event_id é o id da sessão do Stripe. Se o Stripe reenviar o webhook — e ele
- * reenvia —, o Meta reconhece o mesmo evento e não conta a venda duas vezes.
+ * O event_id é o id do pagamento no Stripe. Ele serve a duas desduplicações ao mesmo
+ * tempo: contra o reenvio do webhook — e o Stripe reenvia — e contra o Purchase que a
+ * própria página de pagamento dispara quando a aprovação acontece com o comprador
+ * ainda na tela.
  *
  * Não enviamos IP nem user-agent: quem chama este endpoint é o servidor do Stripe,
  * então os dados de conexão disponíveis aqui são DELE, não do comprador. Mandá-los
  * sujaria a qualidade da correspondência em vez de melhorá-la.
  */
-async function enviarPurchaseAoMeta(sessao, email, carimboDoEvento) {
+async function enviarPurchaseAoMeta(pagamento, email, carimboDoEvento) {
   if (!META_PIXEL_ID || !META_CAPI_TOKEN) {
     console.warn("Conversions API não configurada (META_PIXEL_ID / META_CAPI_ACCESS_TOKEN): Purchase não enviado.");
     return;
@@ -278,8 +336,8 @@ async function enviarPurchaseAoMeta(sessao, email, carimboDoEvento) {
   // não tem metadata: ele só consegue carregar o client_reference_id, com fbc e fbp
   // espremidos em 200 caracteres. Vale menos, mas é melhor que nada — e enquanto esse
   // caminho existir, este código precisa entender os dois.
-  const meta = sessao?.metadata ?? {};
-  const doReference = desempacotarReferencia(sessao?.client_reference_id);
+  const meta = pagamento.metadata ?? {};
+  const doReference = desempacotarReferencia(pagamento.clientReference);
 
   const fbc = meta.fbc || doReference.fbc;
   const fbp = meta.fbp || doReference.fbp;
@@ -295,13 +353,13 @@ async function enviarPurchaseAoMeta(sessao, email, carimboDoEvento) {
       {
         event_name: "Purchase",
         event_time: carimboDoEvento,
-        event_id: sessao?.id,
+        event_id: pagamento.id,
         action_source: "website",
         event_source_url: PAGINA_DE_VENDAS,
         user_data: dadosDoUsuario,
         custom_data: {
-          currency: String(sessao?.currency || "brl").toUpperCase(),
-          value: valorNaUnidadeCheia(sessao?.amount_total, sessao?.currency),
+          currency: String(pagamento.moeda || "brl").toUpperCase(),
+          value: valorNaUnidadeCheia(pagamento.valor, pagamento.moeda),
           content_name: "Método 5P — Manual Completo de Sobrevivência",
         },
       },
@@ -321,7 +379,7 @@ async function enviarPurchaseAoMeta(sessao, email, carimboDoEvento) {
     throw new Error(`Meta ${res.status}: ${resposta.slice(0, 300)}`);
   }
   console.log(
-    `Purchase enviado ao Meta (sessão ${sessao?.id}, fbc:${!!fbc} fbp:${!!fbp} ` +
+    `Purchase enviado ao Meta (${pagamento.id}, fbc:${!!fbc} fbp:${!!fbp} ` +
     `ip:${!!meta.client_ip} ua:${!!meta.client_user_agent}): ${resposta.slice(0, 160)}`,
   );
 }
@@ -362,18 +420,25 @@ export const handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ message: `Evento ignorado: ${evento?.type}` }) };
   }
 
-  const sessao = evento?.data?.object;
+  const pagamento = pagamentoDoEvento(evento);
 
-  // Quem manda é o payment_status, não o nome do evento: no Pix a sessão fecha antes
-  // de o dinheiro entrar.
-  if (sessao?.payment_status !== "paid") {
-    console.log(`Sessão ${sessao?.id} ainda não paga (${sessao?.payment_status}) — aguardando confirmação.`);
+  // O PaymentIntent de uma compra feita pelo link hospedado: quem cuida dela é a
+  // sessão, que chega no mesmo webhook. Ignorar aqui é o que impede a venda de ser
+  // processada duas vezes.
+  if (!pagamento) {
+    return { statusCode: 200, body: JSON.stringify({ message: "Evento duplicado do checkout hospedado" }) };
+  }
+
+  // Quem manda é o estado do pagamento, não o nome do evento: no Pix a sessão fecha
+  // antes de o dinheiro entrar.
+  if (!pagamento.pago) {
+    console.log(`${pagamento.id} ainda não pago (${pagamento.situacao}) — aguardando confirmação.`);
     return { statusCode: 200, body: JSON.stringify({ message: "Pagamento pendente" }) };
   }
 
-  const email = extrairEmail(sessao);
+  const email = pagamento.email;
   if (!email) {
-    console.error(`Sessão ${sessao?.id} paga, mas sem e-mail do comprador.`);
+    console.error(`${pagamento.id} pago, mas sem e-mail do comprador.`);
     return { statusCode: 400, body: JSON.stringify({ error: "E-mail não fornecido" }) };
   }
 
@@ -382,9 +447,9 @@ export const handler = async (event) => {
   // se a criação falhar e o Stripe reenviar, o event_id repetido faz o Meta reconhecer
   // o mesmo evento em vez de contar duas vendas.
   try {
-    await enviarPurchaseAoMeta(sessao, email, evento?.created ?? Math.floor(Date.now() / 1000));
+    await enviarPurchaseAoMeta(pagamento, email, evento?.created ?? Math.floor(Date.now() / 1000));
   } catch (erroMeta) {
-    console.error(`Falha ao enviar Purchase ao Meta (sessão ${sessao?.id}):`, erroMeta?.message || erroMeta);
+    console.error(`Falha ao enviar Purchase ao Meta (${pagamento.id}):`, erroMeta?.message || erroMeta);
   }
 
   try {
@@ -403,7 +468,7 @@ export const handler = async (event) => {
     }
 
     if (ehNovo) {
-      await registrarCompra(dadosSignUp.idToken, dadosSignUp.localId, email, sessao);
+      await registrarCompra(dadosSignUp.idToken, dadosSignUp.localId, email, pagamento);
     }
 
     try {
@@ -417,7 +482,7 @@ export const handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ success: true, mailFailed: true }) };
     }
 
-    console.log(`Acesso liberado para ${email} (novo: ${ehNovo}, sessão: ${sessao?.id})`);
+    console.log(`Acesso liberado para ${email} (novo: ${ehNovo}, pagamento: ${pagamento.id})`);
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (err) {
     console.error("Erro ao processar o webhook:", err);
