@@ -25,6 +25,15 @@
   to = "/.netlify/functions/stripe-webhook"
   status = 200
 
+# O webhook da Hotmart. Mesma regra, e aqui ela é traiçoeira: sem esta linha o /*
+# devolve o index.html com status 200. A Hotmart valida a URL na hora de cadastrar,
+# vê o 200 e aceita — e depois toda venda aprovada posta num HTML. O comprador paga,
+# nunca recebe o acesso, e não aparece erro em lugar nenhum.
+[[redirects]]
+  from = "/api/hotmart-webhook"
+  to = "/.netlify/functions/hotmart-webhook"
+  status = 200
+
 # Setup redirect rules for Single Page Applications (SPA)
 # This ensures that deep links work properly if routes are implemented
 [[redirects]]
