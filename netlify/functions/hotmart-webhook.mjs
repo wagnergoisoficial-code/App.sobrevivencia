@@ -22,7 +22,11 @@ import nodemailer from "nodemailer";
  * A Hotmart tem a integração dela com o Pixel e manda o Purchase sozinha. Se esta
  * função mandasse também, a mesma venda entraria duas vezes no Gerenciador de Eventos
  * — os dois lados geram event_id diferente e o Meta não teria como juntá-los. Só
- * ligue HOTMART_ENVIA_PURCHASE_AO_META se você TIVER desligado o Pixel na Hotmart.
+ * ligue HOTMART_ENVIA_PURCHASE_AO_META=1 se você TIVER desligado o Pixel na Hotmart,
+ * e configure também META_PIXEL_ID e META_CAPI_ACCESS_TOKEN.
+ *
+ * Quando ligado, o envio acontece DEPOIS do e-mail de acesso e com prazo curto: aqui
+ * o que não pode falhar é a entrega ao comprador, não o rastreamento do anúncio.
  */
 
 const HOTTOK = process.env.HOTMART_HOTTOK;
@@ -35,6 +39,15 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const MAIL_FROM = process.env.MAIL_FROM || `Wagner Gois <${GMAIL_USER}>`;
 const MAIL_REPLY_TO = process.env.MAIL_REPLY_TO || GMAIL_USER;
+
+const META_PIXEL_ID = process.env.META_PIXEL_ID;
+const META_CAPI_TOKEN = process.env.META_CAPI_ACCESS_TOKEN;
+const META_TEST_EVENT_CODE = process.env.META_TEST_EVENT_CODE; // só para a aba "Testar eventos"
+// Desligado por padrão: ligar só depois de desligar o Pixel na Hotmart (veja o topo).
+const META_LIGADO = /^(1|true|sim)$/i.test(process.env.HOTMART_ENVIA_PURCHASE_AO_META ?? "");
+const META_API_VERSION = "v21.0";
+const META_PRAZO_MS = 4000;
+const PAGINA_DE_VENDAS = "https://www.manualcompletodesobrevivencia.com/";
 
 const SITE_URL = "https://appmanualcompleto.com";
 const IDENTITY = "https://identitytoolkit.googleapis.com/v1/accounts";
@@ -88,6 +101,7 @@ function vendaDoEvento(corpo) {
   return {
     id: compra.transaction ?? corpo?.id ?? "",
     situacao: compra.status ?? "",
+    carimbo: carimboValido(compra.approved_date ?? compra.order_date ?? corpo?.creation_date),
     email: normalizarEmail(comprador.email ?? dados.subscriber?.email),
     nome: typeof comprador.name === "string" ? comprador.name.trim() : "",
     valor: typeof preco.value === "number" ? preco.value : undefined,
@@ -166,6 +180,96 @@ async function enviarEmailDeAcesso(to, senha, ehNovo) {
     : `Você já tem acesso. Entre em ${SITE_URL} com o e-mail ${to} e sua senha. Esqueceu? Use "Esqueceu a senha?" no site.`;
 
   await entregar({ to, subject: "Seu acesso ao Manual Completo de Sobrevivência", html, text });
+}
+
+function hashSha256(valor) {
+  return crypto.createHash("sha256").update(valor, "utf8").digest("hex");
+}
+
+/**
+ * Desempacota fbc e fbp do campo livre da Hotmart (sck), no mesmo formato
+ * "fb1-<base64url(fbc|fbp)>" que a página de vendas usa no checkout próprio. Sem eles
+ * o Purchase ainda vale — só casa com menos precisão.
+ */
+function desempacotarReferencia(bruto) {
+  if (typeof bruto !== "string" || !bruto.startsWith("fb1-")) return {};
+  try {
+    const b64 = bruto.slice(4).replace(/-/g, "+").replace(/_/g, "/");
+    const [fbc, fbp] = Buffer.from(b64, "base64").toString("utf8").split("|");
+    return { fbc: fbc || undefined, fbp: fbp || undefined };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * O Meta recusa evento com mais de 7 dias. Um carimbo fora dessa janela (ou ausente,
+ * ou em milissegundos de uma versão futura do formato) vira "agora".
+ */
+function carimboValido(bruto) {
+  const agora = Math.floor(Date.now() / 1000);
+  const segundos = typeof bruto === "number" ? (bruto > 1e11 ? Math.floor(bruto / 1000) : bruto) : NaN;
+  if (!Number.isFinite(segundos)) return agora;
+  return segundos > agora - 6 * 24 * 60 * 60 && segundos <= agora + 60 ? segundos : agora;
+}
+
+/**
+ * Envia o Purchase à Conversions API. Nunca lança: uma falha aqui não pode custar o
+ * acesso de quem pagou — por isso quem chama já mandou o e-mail antes.
+ *
+ * O event_id é a transação da Hotmart, o que desduplica o reenvio do próprio webhook.
+ * Ele NÃO desduplica contra o Pixel da Hotmart, que gera id próprio: é justamente por
+ * isso que este envio fica atrás de uma chave, e não ligado por padrão.
+ *
+ * Não mandamos IP nem user-agent: quem chama este endpoint é o servidor da Hotmart,
+ * então esses dados são DELE, não do comprador, e sujariam a correspondência.
+ */
+async function enviarPurchaseAoMeta(venda, email) {
+  if (!META_LIGADO) return;
+  if (!META_PIXEL_ID || !META_CAPI_TOKEN) {
+    console.warn("HOTMART_ENVIA_PURCHASE_AO_META está ligado, mas falta META_PIXEL_ID ou META_CAPI_ACCESS_TOKEN: Purchase não enviado.");
+    return;
+  }
+
+  const { fbc, fbp } = desempacotarReferencia(venda.sck);
+  const dadosDoUsuario = { em: [hashSha256(email)] };
+  if (fbc) dadosDoUsuario.fbc = fbc;
+  if (fbp) dadosDoUsuario.fbp = fbp;
+
+  const corpo = {
+    data: [
+      {
+        event_name: "Purchase",
+        event_time: venda.carimbo,
+        event_id: venda.id || `hotmart-${email}-${venda.carimbo}`,
+        action_source: "website",
+        event_source_url: PAGINA_DE_VENDAS,
+        user_data: dadosDoUsuario,
+        custom_data: {
+          currency: String(venda.moeda || "BRL").toUpperCase(),
+          // A Hotmart já manda o preço na unidade cheia (47.9), sem centavos separados.
+          value: venda.valor,
+          content_name: venda.produto || "Método 5P — Manual Completo de Sobrevivência",
+        },
+      },
+    ],
+    // No corpo, e não na querystring: assim o token não vaza em log de acesso.
+    access_token: META_CAPI_TOKEN,
+  };
+  if (META_TEST_EVENT_CODE) corpo.test_event_code = META_TEST_EVENT_CODE;
+
+  const res = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${META_PIXEL_ID}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+    signal: AbortSignal.timeout(META_PRAZO_MS),
+  });
+
+  const resposta = await res.text();
+  if (!res.ok) {
+    throw new Error(`Meta ${res.status}: ${resposta.slice(0, 300)}`);
+  }
+  console.log(`Purchase enviado ao Meta (transação ${venda.id}, fbc:${!!fbc} fbp:${!!fbp}): ${resposta.slice(0, 160)}`);
 }
 
 /** Registro do comprador. Nunca bloqueia a resposta. */
@@ -306,6 +410,14 @@ export const handler = async (event) => {
     console.log(
       `Acesso liberado para ${venda.email} (novo: ${ehNovo}, transação: ${venda.id}, ${venda.metodo}).`,
     );
+
+    // Por último e sem poder derrubar nada: o acesso já foi entregue acima.
+    try {
+      await enviarPurchaseAoMeta(venda, venda.email);
+    } catch (erroMeta) {
+      console.error(`Falha ao enviar Purchase ao Meta (transação ${venda.id}):`, erroMeta?.message || erroMeta);
+    }
+
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (err) {
     console.error("Erro ao processar o webhook da Hotmart:", err);
